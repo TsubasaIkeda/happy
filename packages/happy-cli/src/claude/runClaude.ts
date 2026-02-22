@@ -465,8 +465,8 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         },
         mcpServers: {
             'happy': {
-                type: 'http' as const,
-                url: happyServer.url,
+                command: 'node',
+                args: [resolve(projectPath(), 'bin', 'happy-mcp.mjs'), '--url', happyServer.url],
             }
         },
         session,

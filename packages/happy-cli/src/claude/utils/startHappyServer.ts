@@ -105,6 +105,23 @@ export async function startHappyServer(client: ApiSessionClient) {
 
     logger.debug(`[happyMCP] server:ready sessionId=${client.sessionId} url=${baseUrl.toString()}`);
 
+    // Health check: verify server responds to MCP initialize request
+    try {
+        const healthResp = await fetch(baseUrl.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'initialize',
+                params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'health-check', version: '1.0.0' } },
+                id: 1
+            })
+        });
+        logger.debug(`[happyMCP] health-check: HTTP ${healthResp.status}`);
+    } catch (error) {
+        logger.debug(`[happyMCP] health-check failed:`, error);
+    }
+
     return {
         url: baseUrl.toString(),
         toolNames: ['change_title'],
