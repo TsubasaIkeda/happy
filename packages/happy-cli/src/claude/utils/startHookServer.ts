@@ -76,6 +76,10 @@ export interface SessionHookData {
 export interface HookServerOptions {
     /** Called when a session hook is received with a valid session ID */
     onSessionHook: (sessionId: string, data: SessionHookData) => void;
+    /** Called when UserPromptSubmit hook fires (Claude starts thinking) */
+    onThinkingStart?: () => void;
+    /** Called when Stop hook fires (Claude stops thinking) */
+    onThinkingStop?: () => void;
 }
 
 export interface HookServer {
@@ -92,11 +96,45 @@ export interface HookServer {
  * @returns Promise resolving to the server instance with port info
  */
 export async function startHookServer(options: HookServerOptions): Promise<HookServer> {
-    const { onSessionHook } = options;
+    const { onSessionHook, onThinkingStart, onThinkingStop } = options;
 
     return new Promise((resolve, reject) => {
         const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-            // Only handle POST to /hook/session-start
+            // Handle POST /hook/user-prompt-submit (thinking start)
+            if (req.method === 'POST' && req.url === '/hook/user-prompt-submit') {
+                try {
+                    // Drain request body
+                    for await (const _chunk of req) { /* discard */ }
+                    logger.debug('[hookServer] Received user-prompt-submit hook');
+                    onThinkingStart?.();
+                    res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
+                } catch (error) {
+                    logger.debug('[hookServer] Error handling user-prompt-submit hook:', error);
+                    if (!res.headersSent) {
+                        res.writeHead(500).end('error');
+                    }
+                }
+                return;
+            }
+
+            // Handle POST /hook/stop (thinking stop)
+            if (req.method === 'POST' && req.url === '/hook/stop') {
+                try {
+                    // Drain request body
+                    for await (const _chunk of req) { /* discard */ }
+                    logger.debug('[hookServer] Received stop hook');
+                    onThinkingStop?.();
+                    res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
+                } catch (error) {
+                    logger.debug('[hookServer] Error handling stop hook:', error);
+                    if (!res.headersSent) {
+                        res.writeHead(500).end('error');
+                    }
+                }
+                return;
+            }
+
+            // Handle POST /hook/session-start
             if (req.method === 'POST' && req.url === '/hook/session-start') {
                 // Set timeout to prevent hanging if Claude doesn't close stdin
                 const timeout = setTimeout(() => {

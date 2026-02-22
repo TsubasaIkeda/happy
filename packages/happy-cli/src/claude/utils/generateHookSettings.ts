@@ -41,6 +41,28 @@ export function generateHookSettingsFile(port: number): string {
                         }
                     ]
                 }
+            ],
+            UserPromptSubmit: [
+                {
+                    matcher: "*",
+                    hooks: [
+                        {
+                            type: "command",
+                            command: `node "${forwarderScript}" ${port} user-prompt-submit`
+                        }
+                    ]
+                }
+            ],
+            Stop: [
+                {
+                    matcher: "*",
+                    hooks: [
+                        {
+                            type: "command",
+                            command: `node "${forwarderScript}" ${port} stop`
+                        }
+                    ]
+                }
             ]
         }
     };

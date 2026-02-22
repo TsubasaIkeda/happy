@@ -67,6 +67,20 @@ global.fetch = function(...args) {
 Object.defineProperty(global.fetch, 'name', { value: 'fetch' });
 Object.defineProperty(global.fetch, 'length', { value: originalFetch.length });
 
+// Intercept stderr to filter transient API 5xx errors while keeping TTY intact.
+// This runs inside the child process so process.stderr remains a real TTY,
+// preserving Claude Code's status line rendering.
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+process.stderr.write = function(chunk, encoding, callback) {
+    const str = typeof chunk === 'string' ? chunk : chunk.toString();
+    if (/API Error: 5\d\d/.test(str)) {
+        writeMessage({ type: 'filtered-error', content: str.trim(), timestamp: Date.now() });
+        if (typeof callback === 'function') callback();
+        return true;
+    }
+    return originalStderrWrite(chunk, encoding, callback);
+};
+
 // Import global Claude Code CLI
 const { getClaudeCliPath, runClaudeCli } = require('./claude_version_utils.cjs');
 

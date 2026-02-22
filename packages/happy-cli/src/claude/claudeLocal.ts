@@ -287,28 +287,13 @@ export async function claudeLocal(opts: {
                     spawnWithShell && spawnCommand ? spawnCommand : 'node',
                     spawnWithShell ? [] : spawnArgs,
                     {
-                        stdio: ['inherit', 'inherit', 'pipe', 'pipe'],
+                        stdio: ['inherit', 'inherit', 'inherit', 'pipe'],
                         signal: opts.abort,
                         cwd: opts.path,
                         env,
                         shell: spawnWithShell,
                     },
                 );
-
-                // Filter stderr: suppress transient API 5xx errors, relay everything else
-                if (child.stderr) {
-                    const stderrRl = createInterface({
-                        input: child.stderr as any,
-                        crlfDelay: Infinity
-                    });
-                    stderrRl.on('line', (line) => {
-                        if (/API Error: 5\d\d/.test(line)) {
-                            logger.debug(`[ClaudeLocal] Filtered transient API error: ${line}`);
-                        } else {
-                            process.stderr.write(line + '\n');
-                        }
-                    });
-                }
 
                 // Listen to the custom fd (fd 3) for thinking state tracking
                 if (child.stdio[3]) {
