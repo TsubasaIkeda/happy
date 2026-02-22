@@ -240,6 +240,14 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     private routeIncomingMessage(message: unknown) {
+        // Ignore messages sent by this CLI instance (echoed back by server broadcast)
+        if (message && typeof message === 'object' && 'meta' in message) {
+            const meta = (message as { meta?: { sentFrom?: string } }).meta;
+            if (meta?.sentFrom === 'cli') {
+                return;
+            }
+        }
+
         const userResult = UserMessageSchema.safeParse(message);
         if (userResult.success) {
             if (this.pendingMessageCallback) {
