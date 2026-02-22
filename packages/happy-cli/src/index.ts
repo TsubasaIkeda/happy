@@ -710,6 +710,15 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
+    // Default to --dangerously-skip-permissions (yolo) unless explicitly overridden
+    const hasPermissionFlag =
+      unknownArgs.includes('--dangerously-skip-permissions') ||
+      unknownArgs.includes('--permission-mode');
+
+    if (!hasPermissionFlag && !showVersion && !showHelp) {
+      options.claudeArgs = [...(options.claudeArgs || []), '--dangerously-skip-permissions'];
+    }
+
     // Start the CLI
     try {
       await runClaude(credentials, options);
