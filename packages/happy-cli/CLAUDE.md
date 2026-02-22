@@ -226,3 +226,51 @@ When using --resume:
 2. Original session remains as historical record
 3. All context preserved but under new session identity
 4. Session ID in stream-json output will be the new one, not the resumed one
+
+# Fork版リリース手順 (GitHub Release + tgz)
+
+npmレジストリではなく、GitHub Releaseにビルド済みtgzを添付して配布する。
+
+## 1. バージョンタグを打つ
+```bash
+TAG=v0.XX.X-fork
+git tag "$TAG"
+git push origin main --tags
+```
+
+## 2. ビルド & パック
+```bash
+yarn workspace @slopus/happy-wire build
+yarn workspace happy-coder build
+cd packages/happy-cli && npm pack && cd -
+```
+
+## 3. GitHub Releaseを作成（tgzをアセットとして添付）
+```bash
+TGZ=$(ls packages/happy-cli/happy-coder-*.tgz | head -1)
+TGZ_NAME=$(basename "$TGZ")
+
+gh release create "$TAG" \
+  "$TGZ" \
+  --repo TsubasaIkeda/happy \
+  --title "happy-coder $TAG" \
+  --notes "## Changes
+- 変更内容をここに記述
+
+## Install
+\`\`\`bash
+sudo npm uninstall -g happy-coder
+npm install -g https://github.com/TsubasaIkeda/happy/releases/download/${TAG}/${TGZ_NAME}
+\`\`\`"
+```
+
+## 4. インストール確認
+```bash
+npm install -g "https://github.com/TsubasaIkeda/happy/releases/download/${TAG}/${TGZ_NAME}"
+happy --version
+```
+
+## 5. クリーンアップ
+```bash
+rm -f packages/happy-cli/happy-coder-*.tgz
+```
