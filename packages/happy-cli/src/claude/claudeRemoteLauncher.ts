@@ -203,6 +203,13 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
         const logMessage = sdkToLogConverter.convert(msg);
         if (logMessage) {
+            // Skip echoing top-level user text messages in remote mode.
+            // The app already has these from its own direct send, so re-sending
+            // them via session protocol would create duplicates.
+            if (logMessage.type === 'user' && !logMessage.isSidechain && typeof logMessage.message?.content === 'string') {
+                return;
+            }
+
             // Add permissions field to tool result content
             if (logMessage.type === 'user' && logMessage.message?.content) {
                 const content = Array.isArray(logMessage.message.content)

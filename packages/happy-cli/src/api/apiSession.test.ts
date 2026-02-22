@@ -300,7 +300,7 @@ describe('ApiSessionClient v3 messages API migration', () => {
         expect((client as any).lastSeq).toBe(1);
     });
 
-    it('sends claude user text as modern session envelope', async () => {
+    it('sends claude user text as direct user message', async () => {
         const client = new ApiSessionClient('fake-token', session);
         mockAxiosPost.mockResolvedValueOnce({
             data: {
@@ -322,25 +322,104 @@ describe('ApiSessionClient v3 messages API migration', () => {
         const payload = mockAxiosPost.mock.calls[0][1];
         expect(payload.messages).toHaveLength(1);
 
-        const sessionUser = decrypt(
+        const decrypted = decrypt(
             session.encryptionKey,
             session.encryptionVariant,
             decodeBase64(payload.messages[0].content)
         );
-        expect(sessionUser).toMatchObject({
-            role: 'session',
+        expect(decrypted).toMatchObject({
+            role: 'user',
             content: {
-                role: 'user',
-                ev: {
-                    t: 'text',
-                    text: 'hi there'
-                }
+                type: 'text',
+                text: 'hi there'
             },
             meta: {
                 sentFrom: 'cli'
             }
         });
-        expect(typeof (sessionUser as any).content.time).toBe('number');
+    });
+
+    it('sends claude assistant messages in legacy output format', async () => {
+        const client = new ApiSessionClient('fake-token', session);
+        mockAxiosPost.mockResolvedValueOnce({
+            data: {
+                messages: [{ id: 'msg-1', seq: 1, localId: 'local-1', createdAt: 1, updatedAt: 1 }]
+            }
+        });
+
+        const assistantBody = {
+            type: 'assistant',
+            uuid: 'test-uuid',
+            message: {
+                role: 'assistant',
+                model: 'claude-opus-4-6',
+                content: [{ type: 'text', text: 'hello world' }]
+            }
+        } as any;
+
+        client.sendClaudeSessionMessage(assistantBody);
+
+        await waitForCheck(() => {
+            expect(mockAxiosPost).toHaveBeenCalledTimes(1);
+        });
+
+        const payload = mockAxiosPost.mock.calls[0][1];
+        expect(payload.messages).toHaveLength(1);
+
+        const decrypted = decrypt(
+            session.encryptionKey,
+            session.encryptionVariant,
+            decodeBase64(payload.messages[0].content)
+        );
+        expect(decrypted).toEqual({
+            role: 'agent',
+            content: {
+                type: 'output',
+                data: assistantBody
+            },
+            meta: {
+                sentFrom: 'cli'
+            }
+        });
+    });
+
+    it('sends claude sidechain user messages in legacy output format', async () => {
+        const client = new ApiSessionClient('fake-token', session);
+        mockAxiosPost.mockResolvedValueOnce({
+            data: {
+                messages: [{ id: 'msg-1', seq: 1, localId: 'local-1', createdAt: 1, updatedAt: 1 }]
+            }
+        });
+
+        const sidechainBody = {
+            type: 'user',
+            uuid: 'sc-uuid',
+            message: { content: 'sidechain prompt' },
+            isSidechain: true
+        } as any;
+
+        client.sendClaudeSessionMessage(sidechainBody);
+
+        await waitForCheck(() => {
+            expect(mockAxiosPost).toHaveBeenCalledTimes(1);
+        });
+
+        const payload = mockAxiosPost.mock.calls[0][1];
+        const decrypted = decrypt(
+            session.encryptionKey,
+            session.encryptionVariant,
+            decodeBase64(payload.messages[0].content)
+        );
+        expect(decrypted).toEqual({
+            role: 'agent',
+            content: {
+                type: 'output',
+                data: sidechainBody
+            },
+            meta: {
+                sentFrom: 'cli'
+            }
+        });
     });
 
     it('sends session protocol messages through enqueueMessage with session envelope', async () => {
@@ -380,7 +459,7 @@ describe('ApiSessionClient v3 messages API migration', () => {
         });
     });
 
-    it('sends only modern payload for user session envelopes', async () => {
+    it('sends user text envelopes as direct user messages', async () => {
         const client = new ApiSessionClient('fake-token', session);
         mockAxiosPost.mockResolvedValueOnce({
             data: {
@@ -402,23 +481,24 @@ describe('ApiSessionClient v3 messages API migration', () => {
         const payload = mockAxiosPost.mock.calls[0][1];
         expect(payload.messages).toHaveLength(1);
 
-        const sessionUser = decrypt(
+        const decrypted = decrypt(
             session.encryptionKey,
             session.encryptionVariant,
             decodeBase64(payload.messages[0].content)
         );
-        expect(sessionUser).toMatchObject({
-            role: 'session',
+        expect(decrypted).toMatchObject({
+            role: 'user',
             content: {
-                id: 'env-user-1',
-                time: 1001,
-                role: 'user',
-                ev: { t: 'text', text: 'shadow this' }
+                type: 'text',
+                text: 'shadow this'
+            },
+            meta: {
+                sentFrom: 'cli'
             }
         });
     });
 
-    it('sends modern session envelope for user text even when ENABLE_SESSION_PROTOCOL_SEND is set', async () => {
+    it('sends direct user message for user text regardless of ENABLE_SESSION_PROTOCOL_SEND flag', async () => {
         process.env.ENABLE_SESSION_PROTOCOL_SEND = 'true';
 
         const client = new ApiSessionClient('fake-token', session);
@@ -442,23 +522,22 @@ describe('ApiSessionClient v3 messages API migration', () => {
         const payload = mockAxiosPost.mock.calls[0][1];
         expect(payload.messages).toHaveLength(1);
 
-        const sessionOnly = decrypt(
+        const decrypted = decrypt(
             session.encryptionKey,
             session.encryptionVariant,
             decodeBase64(payload.messages[0].content)
         );
 
-        expect(sessionOnly).toMatchObject({
-            role: 'session',
+        expect(decrypted).toMatchObject({
+            role: 'user',
             content: {
-                role: 'user',
-                ev: { t: 'text', text: 'session only' }
+                type: 'text',
+                text: 'session only'
             },
             meta: {
                 sentFrom: 'cli'
             }
         });
-        expect(typeof (sessionOnly as any).content.time).toBe('number');
     });
 
     it('sends ACP agent messages through enqueueMessage', async () => {

@@ -14,7 +14,6 @@ import { calculateCost } from '@/utils/pricing';
 import { type SessionEnvelope, type SessionTurnEndStatus } from '@slopus/happy-wire';
 import {
     closeClaudeTurnWithStatus,
-    mapClaudeLogMessageToSessionEnvelopes,
     type ClaudeSessionProtocolState,
 } from '@/claude/utils/sessionProtocolMapper';
 import { InvalidateSync } from '@/utils/sync';
@@ -350,11 +349,34 @@ export class ApiSessionClient extends EventEmitter {
      * @param body - Message body (can be MessageContent or raw content for agent messages)
      */
     sendClaudeSessionMessage(body: RawJSONLines) {
-        const mapped = mapClaudeLogMessageToSessionEnvelopes(body, this.claudeSessionProtocolState);
-        this.claudeSessionProtocolState.currentTurnId = mapped.currentTurnId;
-        for (const envelope of mapped.envelopes) {
-            this.sendSessionProtocolMessage(envelope);
+        // Send user text messages in direct format (role: 'user') and all other
+        // messages in legacy format (role: 'agent', type: 'output'). The legacy
+        // format is supported by all app versions including App Store releases,
+        // whereas session protocol (role: 'session') may not be available yet.
+        if (body.type === 'user' && typeof body.message.content === 'string' && body.isSidechain !== true && body.isMeta !== true) {
+            this.enqueueMessage({
+                role: 'user',
+                content: {
+                    type: 'text',
+                    text: body.message.content
+                },
+                meta: {
+                    sentFrom: 'cli'
+                }
+            });
+        } else {
+            this.enqueueMessage({
+                role: 'agent',
+                content: {
+                    type: 'output',
+                    data: body
+                },
+                meta: {
+                    sentFrom: 'cli'
+                }
+            });
         }
+
         // Track usage from assistant messages
         if (body.type === 'assistant' && body.message?.usage) {
             try {
@@ -421,7 +443,19 @@ export class ApiSessionClient extends EventEmitter {
             return;
         }
 
-        this.enqueueSessionProtocolEnvelope(envelope);
+        // Send user text messages in direct format (role: 'user') instead of
+        // session protocol format. The app always displays direct user messages
+        // but may drop session protocol user text depending on feature flags.
+        this.enqueueMessage({
+            role: 'user',
+            content: {
+                type: 'text',
+                text: envelope.ev.text
+            },
+            meta: {
+                sentFrom: 'cli'
+            }
+        });
     }
 
     /**
